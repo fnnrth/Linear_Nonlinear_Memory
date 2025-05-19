@@ -1,4 +1,4 @@
-# Linear_Nonlinear_Memory
+# Almost Linear RNNs for Memory Tasks
 
 A collection of memory tasks implemented using RNNs with linear and nonlinear components. Each task explores different aspects of memory and computation in recurrent neural networks.
 
