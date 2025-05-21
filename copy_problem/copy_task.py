@@ -25,9 +25,6 @@ def run_copy_task(
     num_epochs=5000,
     learning_rate=0.001,
     eval_every=50,
-
-    patience=10,           # Number of evaluations to wait for improvement
-    min_improvement=0.1,
     include_time_encoding=False,
     # Regularization hyperparameters
     tau=0.1,  # Single regularization parameter
@@ -91,9 +88,7 @@ def run_copy_task(
         eval_every=eval_every,
         lr=learning_rate,
         tau=tau,
-        M_reg=M_reg,
-        patience=patience,
-        min_improvement=min_improvement
+        M_reg=M_reg
     )
     
     return best_model, final_metrics
@@ -119,10 +114,6 @@ def parse_args():
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--eval_every', type=int, default=50)
     parser.add_argument('--tau', type=float, required=True)
-    
-    # Early stopping parameters
-    parser.add_argument('--patience', type=int, default=10)
-    parser.add_argument('--min_improvement', type=float, default=0.1)
     parser.add_argument('--include_time_encoding', type=bool, default=False)
     
     # Run identification
@@ -143,10 +134,8 @@ if __name__ == "__main__":
         f"_sym{args.num_symbols}_del{args.delay}"
     )
     save_directory = os.path.join("saved_models/new_MAR", config_folder_name)
-    # --- End of directory construction ---
 
     # Run experiment, passing all args as keyword arguments
-    # This implicitly passes run_id, needed for filename inside save_model_with_metrics
     model, final_metrics = run_copy_task(**hyperparams)
 
     if model is None:
@@ -160,9 +149,7 @@ if __name__ == "__main__":
             hyperparams=hyperparams, # Pass the full dict including run_id
             save_dir=save_directory # Pass the config-specific directory
         )
-
         print("\nFinal Test Results (Best Model):")
         print(f"Symbol Accuracy: {final_metrics.get('symbol_accuracy', 'N/A'):.2f}%")
         print(f"Sequence Accuracy: {final_metrics.get('sequence_accuracy', 'N/A'):.2f}%")
-        # print(f"\nModel saved to: {model_path}") # Less informative now
-        # print(f"Metadata saved to: {meta_path}") # Less informative now
+

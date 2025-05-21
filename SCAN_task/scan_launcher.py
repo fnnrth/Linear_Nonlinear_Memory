@@ -30,7 +30,7 @@ configs = {
     'regularization': True,
     'tau': 0.1,
     'M_reg': 64,
-    'initial_teacher_forcing': 0.0,
+    'initial_teacher_forcing': 0.0, #results were better without teacher forcing
     'end_token_weight': 5.0
 }
 

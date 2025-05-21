@@ -5,6 +5,9 @@ import math
 import torch.optim as optim
 import os
 import json
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from MAR import regularization_loss
 
 class PLRNN(nn.Module):
     def __init__(self, M, L, N, input_dim):
@@ -117,7 +120,6 @@ class DecoderALRNN(nn.Module):
     
         outputs = torch.cat(outputs, dim=1)
         return outputs, None
-
 
 
 def generate_sequence(encoder, decoder, input_embedding, output_vocab, input_sentence, 
@@ -251,17 +253,8 @@ def train_model(encoder, decoder, input_embedding, output_embedding,
 
             # Optional regularization
             if regularization:
-                reg_A = torch.sum((torch.diag(encoder.W[:M_reg, :M_reg]) - 1) ** 2)
-                W_off_diag = encoder.W[:M_reg, :]
-                reg_W = torch.sum(W_off_diag ** 2) - torch.sum(W_off_diag.diag() ** 2)
-                reg_h = torch.sum(encoder.h[:M_reg] ** 2)
-                loss += tau * (reg_A + reg_W + reg_h)
-
-                reg_A_dec = torch.sum((torch.diag(decoder.W[:M_reg, :M_reg]) - 1) ** 2)
-                W_off_diag_dec = decoder.W[:M_reg, :]
-                reg_W_dec = torch.sum(W_off_diag_dec ** 2) - torch.sum(W_off_diag_dec.diag() ** 2)
-                reg_h_dec = torch.sum(decoder.h[:M_reg] ** 2)
-                loss += tau * (reg_A_dec + reg_W_dec + reg_h_dec)
+                loss+=regularization_loss(encoder, tau, M_reg)
+                loss+=regularization_loss(decoder, tau, M_reg)
 
             loss.backward()
             optimizer.step()
@@ -272,8 +265,8 @@ def train_model(encoder, decoder, input_embedding, output_embedding,
             print(f"Epoch [{epoch+1}/{num_epochs}] Loss: {avg_loss:.4f} | Teacher Forcing: {teacher_forcing_ratio:.2f}")
 
         if (epoch + 1) % 10 == 0:
-            pass
-            # test_model_token_and_sequence_level(encoder, decoder, input_embedding, output_vocab, test_loader, device=device)
+            token_accuracy, sequence_accuracy = test_model_token_and_sequence_level(encoder, decoder, input_embedding, output_vocab, test_loader, device=device)
+            print(f"Epoch [{epoch+1}/{num_epochs}] Token Accuracy: {token_accuracy:.2f}% | Sequence Accuracy: {sequence_accuracy:.2f}%")
 
     # Get final test accuracy
     token_accuracy, sequence_accuracy = test_model_token_and_sequence_level(encoder, decoder, input_embedding, output_vocab, test_loader, device=device)

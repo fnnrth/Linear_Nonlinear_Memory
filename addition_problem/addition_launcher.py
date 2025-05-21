@@ -20,7 +20,6 @@ configs = {
     'Ts': [100],  # Sequence lengths
     # Model hyperparameters
     'Ls': [50],  # Nonlinear dimensions
-    #'Ls': [0],
     'taus': [0.1],  # Regularization strengths for A
     
     # Fixed hyperparameters
@@ -28,7 +27,7 @@ configs = {
     'N': 1,   # Output dimension (sum)
     'input_dim': 2,  # Input dimension (value + mask)
     'M_reg': 25,  # Number of units for regularization
-    'num_train': 10000,
+    'num_train': 1000,
     'num_test': 1000,
     'batch_size': 128,
     'num_epochs': 2000,

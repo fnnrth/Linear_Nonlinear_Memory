@@ -29,10 +29,10 @@ Each task directory contains:
 Each task can be run independently using its launcher script. For example:
 ```bash
 # Run a single experiment
-python Context_Switching/memory_launcher.py --M 2 --L 2
+python context_switching/memory_launcher.py --M 2 --L 2
 
 # Run multiple experiments in parallel
-python Classification Problems/launcher_mnist.py
+python classification_problems/launcher_mnist.py
 ```
 
 For multiple experiments, you can select different combinations of hyperparameters, number of processes executed simultaneously, and number of threads used.

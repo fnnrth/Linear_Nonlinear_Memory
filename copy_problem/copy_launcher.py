@@ -27,17 +27,14 @@ configs = {
     'taus': [0.1],  # Regularization strengths
     'Ms': [50],
     # Fixed hyperparameters
-    'num_train': 2000,
+    'num_train': 1000,
     'num_test': 200,
-    'time_dim': 16,
+    'time_dim': 0,
     'batch_size': 64,
     'num_epochs': 8000,
     'eval_every': 100,
     'learning_rate': 0.001,
-    
-    # Early stopping parameters
-    'patience': 200,
-    'min_improvement': 0.1
+    'include_time_encoding': False, #optionally include time encoding to provide information about the position of the symbol in the sequence as additional input
 }
 
 def launch(args):
@@ -61,9 +58,7 @@ def launch(args):
         "--batch_size", str(configs['batch_size']),
         "--num_epochs", str(configs['num_epochs']),
         "--eval_every", str(configs['eval_every']),
-        "--learning_rate", str(configs['learning_rate']),
-        "--patience", str(configs['patience']),
-        "--min_improvement", str(configs['min_improvement'])
+        "--learning_rate", str(configs['learning_rate'])
     ]
     
     return subprocess.call(cmd)

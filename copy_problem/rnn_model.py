@@ -32,7 +32,6 @@ class PLRNN(nn.Module):
         self.C = nn.Parameter(torch.randn(self.M, self.input_dim) * 0.1)
         # Readout matrix D
         self.D = nn.Parameter(torch.randn(self.N, self.M) * 0.1)
-        #self.D = nn.Linear(M, input_dim) 
     
     def forward(self, x):
 
@@ -92,12 +91,9 @@ def train_model(
     lr=0.001,
     tau=0.005,
     M_reg=25,
-    patience=10,           # Number of evaluations to wait for improvement
-    min_improvement=0.1,   # Minimum improvement in accuracy to be considered significant (0.1%)
 ):
     """
-    Train the PLRNN model with early stopping.
-    
+    Train the PLRNN model for a fixed number of epochs.
     Args:
         model: PLRNN model instance
         train_loader: DataLoader for training data
@@ -108,19 +104,10 @@ def train_model(
         lr: Learning rate
         tau: Global regularization strength
         M_reg: Number of units to apply regularization to
-        patience: Number of evaluations to wait for improvement before early stopping
-        min_improvement: Minimum improvement in accuracy (percentage points) to be considered significant
     """
     criterion = nn.CrossEntropyLoss(ignore_index=-100)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
-    best_test_acc = -1 # Initialize to handle no improvement case
-    best_model = None
-    patience_counter = 0
-    last_eval_epoch = -1
-    # --- Initialize metrics here ---
-    last_metrics = {} # Store the metrics from the last evaluation
-
     print("Epoch | Train Loss | Test Loss | Symbol Acc | Sequence Acc")
     print("-" * 55)
     
@@ -150,51 +137,18 @@ def train_model(
         
         # Evaluate on test set periodically
         if (epoch + 1) % eval_every == 0:
-            # --- Assign to last_metrics ---
-            last_metrics = evaluate_model(model, test_loader, seq_len, criterion)
+            metrics = evaluate_model(model, test_loader, seq_len, criterion)
             train_loss = total_loss / num_batches
             
-            print(f"{epoch+1:5d} | {train_loss:.4f} | {last_metrics['loss']:.4f} | "
-                  f"{last_metrics['symbol_accuracy']:9.2f} | {last_metrics['sequence_accuracy']:11.2f}")
-            
-            # Early stopping logic
-            current_acc = last_metrics['sequence_accuracy']
-            if best_model is None or current_acc > best_test_acc + min_improvement:
-                # Improvement found (or first evaluation)
-                best_test_acc = current_acc
-                best_model = copy.deepcopy(model)
-                patience_counter = 0
-                print(f"    -> New best model saved (Acc: {best_test_acc:.2f}%)")
-            else:
-                patience_counter += 1
-                print(f"    -> No improvement ({patience_counter}/{patience})")
-                
-            if patience_counter >= patience:
-                print(f"\nEarly stopping triggered: No significant improvement for {patience} evaluations.")
-                print(f"Best sequence accuracy achieved: {best_test_acc:.2f}%")
-                print(f"Stopping at epoch {epoch+1}")
-                break
-            
-            last_eval_epoch = epoch
+            print(f"{epoch+1:5d} | {train_loss:.4f} | {metrics['loss']:.4f} | "
+                  f"{metrics['symbol_accuracy']:9.2f} | {metrics['sequence_accuracy']:11.2f}")
     
-    # Handle cases where no evaluation occurred or training finished
-    if best_model is None:
-        print("\nWarning: No evaluation was performed or no improvement detected.")
-        print("Returning the model from the last epoch and empty metrics.")
-        best_model = copy.deepcopy(model) # Return last state if no best was saved
-        # Ensure last_metrics is populated if an eval happened but no improvement
-        if not last_metrics and len(test_loader) > 0:
-             print("Performing final evaluation...")
-             last_metrics = evaluate_model(model, test_loader, seq_len, criterion)
-    elif last_eval_epoch < epoch: # Check if training finished after the last evaluation
-         print(f"\nCompleted training up to epoch {epoch+1}.")
-         print(f"Best sequence accuracy achieved: {best_test_acc:.2f}%")
-
-
-    # --- Return the last calculated metrics ---
-    # If best_model exists, last_metrics corresponds to its performance *at that time*.
-    # If no best_model, last_metrics will be from the final evaluation (if any) or empty.
-    return best_model, last_metrics
+    # Perform final evaluation
+    final_metrics = evaluate_model(model, test_loader, seq_len, criterion)
+    print(f"\nTraining completed after {num_epochs} epochs.")
+    print(f"Final sequence accuracy: {final_metrics['sequence_accuracy']:.2f}%")
+    
+    return model, final_metrics
 
 def evaluate_model(model, data_loader, seq_len, criterion):
     """
