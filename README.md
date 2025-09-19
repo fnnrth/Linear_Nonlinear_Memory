@@ -1,6 +1,6 @@
-# Almost Linear RNNs for Memory Tasks
+# Almost Linear RNNs for Sequence Modeling Tasks
 
-A collection of memory tasks implemented using AL-RNNs from the paper "Uncovering the Functional Roles of Nonlinearity in Memory".
+A collection of sequence modeling tasks tasks implemented using AL-RNNs from the paper "Uncovering the Computational Roles of Nonlinearity in Sequence Modeling".
 
 ## Project Structure
 
@@ -10,6 +10,7 @@ Each task is organized in its own subdirectory:
 - **Copy Problem/**: Sequence copying task with variable delays
 - **Context Switching/**: Context-dependent evidence integration task
 - **Addition Problem/**: Simple addition task with context-dependent computation
+- **PFC1_task/**: Joint task-training and spike reconstructions
 - **SCAN task/**: Language-like instruction following task
 
 ### Task Directory Structure
