@@ -1,18 +1,19 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
-from generate_data import generate_copy_task_dataset_discrete
-from rnn_model import PLRNN, LSTM, GRU, train_model, evaluate_model, save_model_with_metrics
+from generate_data import generate_variable_delay_task_dataset_discrete
+from rnn_model import PLRNN, LSTM, GRU, train_model_variable_delay, evaluate_model_variable_delay, save_model_with_metrics
 from ssm_models import create_ssm_model
 import copy
 import argparse
 import os
 
-def run_copy_task(
+def run_variable_delay_task(
     # Task hyperparameters
-    seq_len=3,
-    delay=50,
-    num_symbols=3,
+    seq_len=8,
+    static_period=50,
+    variable_period=50,
+    num_symbols=5,
     num_train=1000,
     num_test=200,
     time_dim=16,
@@ -20,7 +21,7 @@ def run_copy_task(
     # Model hyperparameters
     hidden_size=50,
     nonlin_size=25,
-    model_type="plrnn",  # Model type: "plrnn", "lstm", or "gru"
+    model_type="plrnn",  # Model type: "plrnn", "lstm", "gru", "s4", "hippo", "mamba"
     nonlinearity_type="relu",  # Nonlinearity: "relu", "tanh", or "gelu" (only for PLRNN)
     
     # Training hyperparameters
@@ -34,40 +35,53 @@ def run_copy_task(
     tau=0.1,  # Single regularization parameter
 ):
     """
-    Run the copy task experiment with train/test split and evaluation.
+    Run the variable delay task experiment with train/test split and evaluation.
+    
+    Task structure:
+    1. Static recall period (first static_period time steps)
+    2. Variable cue period (next variable_period time steps where cue can occur randomly)
+    3. Fixed total sequence length with padding after recall
     """
     # Calculate M_reg as half of hidden_size (rounded to nearest integer)
     M_reg = round(hidden_size / 2)
     
     # Calculate derived parameters
-    T_total = seq_len + 1 + delay + seq_len
+    total_len = static_period + variable_period + seq_len
     if include_time_encoding:
         input_dim = num_symbols + time_dim
     else:
         input_dim = num_symbols
     
     # Create datasets and loaders
-    print(f"Generating datasets (train: {num_train}, test: {num_test} samples)...")
+    print(f"Generating variable delay datasets (train: {num_train}, test: {num_test} samples)...")
+    print(f"Task structure: {static_period} static + {variable_period} variable + {seq_len} recall = {total_len} total steps")
     
     # Generate training data
-    x_train, y_train = generate_copy_task_dataset_discrete(
+    x_train, y_train, train_cues = generate_variable_delay_task_dataset_discrete(
         seq_len=seq_len,
         num_symbols=num_symbols,
         num_samples=num_train,
-        delay=delay,
+        static_period=static_period,
+        variable_period=variable_period,
         include_time_encoding=include_time_encoding,
         time_dim=time_dim
     )
     
     # Generate test data
-    x_test, y_test = generate_copy_task_dataset_discrete(
+    x_test, y_test, test_cues = generate_variable_delay_task_dataset_discrete(
         seq_len=seq_len,
         num_symbols=num_symbols,
         num_samples=num_test,
-        delay=delay,
+        static_period=static_period,
+        variable_period=variable_period,
         include_time_encoding=include_time_encoding,
         time_dim=time_dim
     )
+    
+    print(f"Data shapes:")
+    print(f"  x_train: {x_train.shape}, y_train: {y_train.shape}")
+    print(f"  x_test: {x_test.shape}, y_test: {y_test.shape}")
+    print(f"  Cue positions - Train: {min(train_cues)}-{max(train_cues)}, Test: {min(test_cues)}-{max(test_cues)}")
     
     train_loader = DataLoader(TensorDataset(x_train, y_train), batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(TensorDataset(x_test, y_test), batch_size=batch_size, shuffle=False)
@@ -109,11 +123,13 @@ def run_copy_task(
     
     # Train model
     print("Starting training...")
-    best_model, final_metrics = train_model(
+    best_model, final_metrics = train_model_variable_delay(
         model=model,
         train_loader=train_loader,
         test_loader=test_loader,
         seq_len=seq_len,
+        cue_positions_train=train_cues,
+        cue_positions_test=test_cues,
         num_epochs=num_epochs,
         eval_every=eval_every,
         lr=learning_rate,
@@ -124,11 +140,12 @@ def run_copy_task(
     return best_model, final_metrics
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Copy Task Training')
+    parser = argparse.ArgumentParser(description='Variable Delay Task Training')
     
     # Task hyperparameters
     parser.add_argument('--seq_len', type=int, required=True)
-    parser.add_argument('--delay', type=int, required=True)
+    parser.add_argument('--static_period', type=int, required=True)
+    parser.add_argument('--variable_period', type=int, required=True)
     parser.add_argument('--num_symbols', type=int, required=True)
     parser.add_argument('--num_train', type=int, default=1000)
     parser.add_argument('--num_test', type=int, default=200)
@@ -136,7 +153,7 @@ def parse_args():
     
     # Model hyperparameters
     parser.add_argument('--hidden_size', type=int, default=50)
-    parser.add_argument('--nonlin_size', type=int, default=25)  # Made optional, will be ignored for LSTM/GRU
+    parser.add_argument('--nonlin_size', type=int, default=25)  # Made optional, will be ignored for LSTM/GRU/SSMs
     parser.add_argument('--model_type', type=str, default='plrnn', choices=['plrnn', 'lstm', 'gru', 's4', 'hippo', 'mamba'])
     parser.add_argument('--nonlinearity_type', type=str, default='relu', choices=['relu', 'tanh', 'gelu'])
     
@@ -145,7 +162,7 @@ def parse_args():
     parser.add_argument('--num_epochs', type=int, default=5000)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--eval_every', type=int, default=50)
-    parser.add_argument('--tau', type=float, default=0.1)  # Made optional, will be ignored for LSTM/GRU
+    parser.add_argument('--tau', type=float, default=0.1)  # Made optional, will be ignored for LSTM/GRU/SSMs
     parser.add_argument('--include_time_encoding', type=bool, default=False)
     
     # Results organization
@@ -168,22 +185,22 @@ if __name__ == "__main__":
         # For PLRNN: include model type, nonlinearity, L, tau, and task parameters
         config_folder_name = (
             f"plrnn_{args.nonlinearity_type}_L{args.nonlin_size}_tau{args.tau:.3f}_"
-            f"seq{args.seq_len}_sym{args.num_symbols}_del{args.delay}"
+            f"seq{args.seq_len}_static{args.static_period}_var{args.variable_period}_sym{args.num_symbols}"
         )
     elif args.model_type.lower() in ["s4", "hippo", "mamba"]:
         # For SSM models: include model type and task parameters (L and tau don't apply)
         config_folder_name = (
-            f"{args.model_type}_seq{args.seq_len}_sym{args.num_symbols}_del{args.delay}"
+            f"{args.model_type}_seq{args.seq_len}_static{args.static_period}_var{args.variable_period}_sym{args.num_symbols}"
         )
     else:
         # For LSTM and GRU: include model type and task parameters (L and tau don't apply)
         config_folder_name = (
-            f"{args.model_type}_seq{args.seq_len}_sym{args.num_symbols}_del{args.delay}"
+            f"{args.model_type}_seq{args.seq_len}_static{args.static_period}_var{args.variable_period}_sym{args.num_symbols}"
         )
     save_directory = os.path.join(args.results_folder, config_folder_name)
 
     # Run experiment, passing all args as keyword arguments
-    model, final_metrics = run_copy_task(**hyperparams)
+    model, final_metrics = run_variable_delay_task(**hyperparams)
 
     if model is None:
          print(f"Training failed or stopped very early for run {args.run_id}. No model saved.")
@@ -198,5 +215,4 @@ if __name__ == "__main__":
         )
         print("\nFinal Test Results (Best Model):")
         print(f"Symbol Accuracy: {final_metrics.get('symbol_accuracy', 'N/A'):.2f}%")
-        print(f"Sequence Accuracy: {final_metrics.get('sequence_accuracy', 'N/A'):.2f}%")
-
+        print(f"Sequence Accuracy: {final_metrics.get('sequence_accuracy', 'N/A'):.2f}%") 
