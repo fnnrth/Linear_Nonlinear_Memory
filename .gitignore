@@ -1,1 +1,19 @@
+# VSCode settings
 .vscode/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Model Checkpoints (Large files)
+checkpoints/
+*.pt
+*.pth
+
+# Results and Data
+results/
+*.json
+datasets/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/

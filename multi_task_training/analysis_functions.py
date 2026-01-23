@@ -6,7 +6,6 @@ import numpy as np
 
 
 def align_bitcode_distributions(distributions_dict):
-
     # Get all unique bitcodes across all tasks
     all_bitcodes = set()
     for dist in distributions_dict.values():
