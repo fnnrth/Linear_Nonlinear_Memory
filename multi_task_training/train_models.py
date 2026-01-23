@@ -50,7 +50,7 @@ def create_tasks(duration_params):
         GoNogo(duration_params),
     ]
 
-def train_and_evaluate(M, L, N, duration_params, run_id=1, 
+def train_and_evaluate(M, L, N, duration_params, device='cpu', run_id=1, 
                        n_train_trials=5000, n_test_trials=1000,
                        batch_size=64, num_epochs=150, lr=1e-3,
                        tau=0.01, save_dir='checkpoints', results_dir='results'):
