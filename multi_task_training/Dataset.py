@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple
 
 class CognitiveTask:
     """Base class for cognitive tasks"""
-    BASE_INPUT_DIM = 7  # Maximum input channels needed by any task
+    BASE_INPUT_DIM = 9  # Maximum input channels needed by any task
     
     def __init__(self, duration_params: Dict):
         self.duration_params = duration_params
@@ -498,6 +498,8 @@ class GoNogo(CognitiveTask):
         mask[t_resp_start:] = 1
         
         return inputs, targets, mask
+    
+
 
 # ============================================================================
 # Dataset
@@ -526,6 +528,41 @@ class MultiTaskDataset(Dataset):
         inputs = torch.cat([inputs, task_id], dim=1)
         
         return inputs, targets, mask, task_idx
+
+
+class ContinuousMultitaskDataset(MultiTaskDataset):
+    """
+    A wrapper around MultiTaskDataset that allows training on ONLY ONE task at a time,
+    while keeping the input dimensions correct for the GLOBAL set of tasks.
+    """
+    def __init__(self, tasks, n_trials=1000):
+        super().__init__(tasks, n_trials)
+        self.active_task_idx = 0  # Default to the first task
+        
+    def set_active_task(self, task_idx):
+        """Switch the dataset to generate trials only for this specific task index."""
+        if 0 <= task_idx < len(self.tasks):
+            self.active_task_idx = task_idx
+        else:
+            raise ValueError(f"Invalid task index {task_idx}. Max is {len(self.tasks)-1}")
+
+    def __getitem__(self, idx):
+        # 1. Always select the currently ACTIVE task
+        task = self.tasks[self.active_task_idx]
+        
+        # 2. Generate trial (inputs has shape [T, 7])
+        inputs, targets, mask = task() 
+        
+        # 3. Add Task ID: CRITICAL STEP
+        # We create a one-hot vector with the size of ALL tasks (Global dimension),
+        # even though we are only training on one specific task right now.
+        task_id = torch.zeros(inputs.shape[0], len(self.tasks))
+        task_id[:, self.active_task_idx] = 1
+        
+        # 4. Concatenate
+        inputs = torch.cat([inputs, task_id], dim=1)
+        
+        return inputs, targets, mask, self.active_task_idx
 
 def collate_fn(batch):
     """Custom collate function to handle variable length sequences and input dims"""
