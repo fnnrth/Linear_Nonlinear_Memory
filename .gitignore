@@ -17,3 +17,6 @@ datasets/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
+
+# Unncessery Stuff
+.DS_Store
