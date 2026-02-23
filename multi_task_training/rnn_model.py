@@ -2,12 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import uniform_
+from torch.utils.data import DataLoader
 import numpy as np
 from torch.nn.init import uniform_, xavier_uniform_
 from random import randint
 from torch import optim
 
 from datetime import datetime
+from Dataset import (
+    MultiTaskDataset, DelayedResponse, ReactionTime, CategoryDecision,
+    DelayedMatchToSample, ContextIntegration, GoNogo, collate_fn
+)
 from MAR import regularization_loss
 # ============================================================================
 # Modified AL-RNN Model
@@ -218,6 +223,91 @@ def train_multitask(model, train_loader, optimizer, device, tau=0.01, M_reg=10, 
                 print()
     
     return loss_history, train_task_accuracies, test_loss_history, test_task_accuracies
+
+def train_continuous_sequential(model, task_sequence, optimizer, device, test_loader_all,
+                                tau=0.01, M_reg=10, 
+                                epochs_per_task=20, trials_per_epoch=1000):
+    """
+    Trains on tasks sequentially (Task 1 -> Task 2...) but evaluates on ALL tasks 
+    after every epoch to track catastrophic forgetting.
+    """
+    # 1. Initialize History Containers
+    # We track the test accuracy of EVERY task across the entire timeline
+    num_total_tasks = len(test_loader_all.dataset.tasks)
+    loss_history = []
+    test_task_accuracies = {i: [] for i in range(num_total_tasks)}
+    
+    total_epoch_counter = 0
+
+    # 2. Phase Loop: Iterate through each task in the sequence
+    for phase_idx, current_task in enumerate(task_sequence):
+        print(f"\n=== Phase {phase_idx+1}/{len(task_sequence)}: Training on {current_task.__class__.__name__} ({getattr(current_task, 'mode', '')}) ===")
+        
+        # Create a Train Loader SPECIFIC to the current task
+        # We wrap it in a list because MultiTaskDataset expects a list
+        current_train_dataset = MultiTaskDataset([current_task], n_trials=trials_per_epoch)
+        current_train_loader = DataLoader(current_train_dataset, batch_size=64, 
+                                          shuffle=True, collate_fn=collate_fn)
+        
+        # 3. Epoch Loop: Train on the current task
+        for epoch in range(epochs_per_task):
+            model.train()
+            epoch_loss = 0
+            
+            # --- Training Step (Adapted from your snippet) ---
+            for batch_idx, (inputs, targets, masks, task_ids) in enumerate(current_train_loader):
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+                masks = masks.to(device)
+                
+                optimizer.zero_grad()
+                
+                # Forward pass
+                outputs = model(inputs)
+                
+                # Compute loss (Fixation + Direction + Regularization)
+                fix_loss = F.mse_loss(outputs[:, 0], targets[:, 0])
+                dir_loss = F.mse_loss(outputs[:, 1:], targets[:, 1:])
+                loss = fix_loss + dir_loss
+                
+                # Add Regularization
+                reg_loss = regularization_loss(model, tau, M_reg)
+                loss += reg_loss
+                
+                # Backward pass
+                loss.backward()
+                optimizer.step()
+                
+                epoch_loss += loss.item()
+            
+            # Record average training loss for this epoch
+            avg_loss = epoch_loss / len(current_train_loader)
+            loss_history.append(avg_loss)
+            
+            # --- Evaluation Step (Check for Forgetting) ---
+            # We evaluate on ALL tasks using the passed 'test_loader_all'
+            # This uses your existing 'compute_accuracies' function
+            current_test_accs = compute_accuracies(model, test_loader_all, device, num_total_tasks)
+            
+            # Store history
+            for task_id in range(num_total_tasks):
+                test_task_accuracies[task_id].append(current_test_accs[task_id])
+            
+            # --- Logging ---
+            if (epoch + 1) % 5 == 0:
+                print(f"  Epoch {epoch+1}/{epochs_per_task} | Train Loss: {avg_loss:.4f}")
+                # Print accuracy for the Current Task vs. Previous Tasks
+                # We need to map the current phase to the global task index
+                # (Assuming task_sequence matches the order in test_loader_all for simplicity)
+                print(f"    Global Accuracies: ", end="")
+                for t_id, acc in current_test_accs.items():
+                    marker = "*" if t_id == phase_idx else "" # Mark current task
+                    print(f"T{t_id}{marker}: {acc:.0%} | ", end="")
+                print()
+                
+            total_epoch_counter += 1
+
+    return loss_history, test_task_accuracies
 
 
 def get_latent_states(model, test_loader, device, task_names):
