@@ -31,6 +31,61 @@ class CognitiveTask:
         
         return inputs, targets, mask
 
+class CopyTask(CognitiveTask):
+    """Simple copy task: remember a random input pattern and reproduce it after delay"""
+    def __init__(self, duration_params: Dict, pattern_dim=3, pattern_length=5):
+        super().__init__(duration_params)
+        self.pattern_dim = pattern_dim  # Number of input channels used for the pattern
+        self.pattern_length = pattern_length  # Number of time steps the pattern is presented
+        
+    def generate_trial(self):
+        T_context = np.random.randint(*self.duration_params['context'])
+        T_stim = np.random.randint(*self.duration_params['stimulus'])
+        T_delay = np.random.randint(*self.duration_params['delay'])
+        T_response = np.random.randint(*self.duration_params['response'])
+        T_total = T_context + T_stim + T_delay + T_response
+
+        if T_stim < self.pattern_length:
+            raise ValueError(f"Stimulus duration must be at least {self.pattern_length} to present the full pattern.")
+        
+        # Sample random pattern
+        pattern = torch.rand(self.pattern_length, self.pattern_dim)
+        num_repeats = (T_stim // self.pattern_length) + 1
+        repeated_pattern = pattern.repeat(num_repeats, 1)
+
+        # Create inputs: [fixation, pattern..., rule_copy]
+        inputs = torch.zeros(T_total, self.pattern_dim + 2)
+        
+        # Context period
+        inputs[:T_context, 0] = 1  # fixation
+        inputs[:T_context, -1] = 1  # rule_copy
+        
+        # Stimulus period: fixation + pattern + rule
+        t_stim_start = T_context
+        t_stim_end = t_stim_start + T_stim
+        inputs[t_stim_start:t_stim_end, 0] = 1
+        inputs[t_stim_start:t_stim_end, 1:1+self.pattern_dim] = repeated_pattern[:T_stim]
+        inputs[t_stim_start:t_stim_end, -1] = 1
+        
+        # Delay period: fixation + rule
+        t_delay_start = t_stim_end
+        t_delay_end = t_delay_start + T_delay
+        inputs[t_delay_start:t_delay_end, 0] = 1
+        inputs[t_delay_start:t_delay_end, -1] = 1
+        
+        # Response period: no fixation, rule still on
+        t_resp_start = t_delay_end
+        inputs[t_resp_start:, -1] = 1
+        
+        # Target output: reproduce the pattern during response period
+        targets = torch.zeros(T_total, self.pattern_dim)
+
+        # Mask: only evaluate during response period
+        mask = torch.zeros(T_total)
+        mask[t_resp_start:] = 1
+        
+        return inputs, targets, mask
+
 class DelayedResponse(CognitiveTask):
     """
     Delayed Response task: remember stimulus direction and respond after delay
