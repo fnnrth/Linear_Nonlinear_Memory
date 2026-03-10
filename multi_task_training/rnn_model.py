@@ -25,6 +25,13 @@ class PLRNN(nn.Module):
         self.N = N
         self.input_dim = input_dim
         
+        if isinstance(N, tuple):
+            self.output_shape = N          
+            flat_out_dim = N[0] * N[1]   
+        else:
+            self.output_shape = (N,)       
+            flat_out_dim = N               
+
         # Diagonal matrix A for latent dynamics
         self.A = nn.Parameter(torch.randn(L) * 0.1 + 0.9)
         
@@ -38,7 +45,7 @@ class PLRNN(nn.Module):
         self.C = nn.Parameter(torch.randn(M, input_dim) * 0.1)
         
         # Output weights
-        self.D = nn.Parameter(torch.randn(N, M) * 0.1)
+        self.D = nn.Parameter(torch.randn(flat_out_dim, M) * 0.1)
         
     def init_hidden(self, batch_size):
         return torch.zeros(batch_size, self.M)
@@ -83,6 +90,7 @@ class PLRNN(nn.Module):
         
         # Output from final hidden state
         output = z @ self.D.t()
+        output = output.view(batch_size, *self.output_shape)
         
         return output
 
